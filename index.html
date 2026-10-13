@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f1720">
+  <meta name="description" content="Statue : détecteur de mouvement pour jeux d'immobilité.">
+  <title>Statue</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Statue</h1>
+      <div class="stats">
+        <div class="stat big"><span id="count">0</span><small>mouvements</small></div>
+        <div class="stat"><span id="streak">0:00</span><small>série</small></div>
+        <div class="stat"><span id="best">0:00</span><small>record</small></div>
+      </div>
+    </header>
+
+    <div id="stage">
+      <div id="view">
+        <video id="video" playsinline muted autoplay></video>
+        <canvas id="overlay"></canvas>
+        <div id="zone" hidden></div>
+        <div id="banner" hidden></div>
+      </div>
+      <p id="hint">Appuie sur « Caméra » pour commencer.</p>
+    </div>
+
+    <div id="meter" aria-label="Niveau de mouvement"><div id="meterFill"></div><div id="meterMark"></div></div>
+
+    <div class="row">
+      <button id="cam" class="secondary">Caméra</button>
+      <button id="go" class="primary" disabled>Démarrer</button>
+    </div>
+    <div class="row">
+      <button id="flip" class="secondary" disabled>Retourner</button>
+      <button id="zoneBtn" class="secondary" disabled>Zone</button>
+      <button id="reset" class="secondary">Remise à 0</button>
+    </div>
+
+    <details>
+      <summary>Réglages</summary>
+      <label>Sensibilité <output id="sensOut"></output>
+        <input id="sens" type="range" min="1" max="10" step="1">
+      </label>
+      <label>Délai avant départ <output id="delayOut"></output>
+        <input id="delay" type="range" min="0" max="30" step="1">
+      </label>
+      <label>Pause après détection <output id="coolOut"></output>
+        <input id="cool" type="range" min="1" max="10" step="0.5">
+      </label>
+      <label>Son
+        <select id="sound">
+          <option value="alarm">Alarme</option>
+          <option value="buzz">Buzzer</option>
+          <option value="beep">Bip</option>
+          <option value="off">Aucun</option>
+        </select>
+      </label>
+      <button id="test" class="secondary">Tester le son</button>
+      <p class="note">Zone : appuie sur « Zone » puis trace un rectangle sur l'image ; seul ce qui s'y passe compte.
+        La barre montre le mouvement mesuré, le trait blanc le seuil de déclenchement.
+        Pose le téléphone bien stable : s'il bouge, tout bouge.</p>
+    </details>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
