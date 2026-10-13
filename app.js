@@ -1,17 +1,17 @@
 'use strict';
 
-// Analyse sur une image réduite : peu coûteux, même sur un petit téléphone.
-const AW = 80;          // largeur d'analyse (px)
+// Analyse sur une image réduite (largeur réglable) : peu coûteux, même sur un petit téléphone.
 const FRAME_MS = 80;    // ~12 images/s analysées
 const CONFIRM = 2;      // images consécutives au-dessus du seuil pour déclencher
 
 const $ = (id) => document.getElementById(id);
 const video = $('video'), view = $('view'), overlay = $('overlay'), zoneEl = $('zone');
 const banner = $('banner'), hint = $('hint'), meterFill = $('meterFill');
+const levelEl = $('level'), thrEl = $('thr');
 const goBtn = $('go'), camBtn = $('cam'), flipBtn = $('flip'), zoneBtn = $('zoneBtn');
 
 // ---------- Réglages persistants ----------
-const DEFAULTS = { sens: 6, delay: 5, cool: 2, sound: 'alarm', facing: 'user', zone: null, count: 0, best: 0 };
+const DEFAULTS = { sens2: 50, res: 160, delay: 5, cool: 2, sound: 'alarm', deviceId: null, zone: null, count: 0, best: 0 };
 let cfg = { ...DEFAULTS };
 try { Object.assign(cfg, JSON.parse(localStorage.getItem('statue') || '{}')); } catch (e) {}
 function save() { try { localStorage.setItem('statue', JSON.stringify(cfg)); } catch (e) {} }
@@ -63,15 +63,22 @@ async function startCamera() {
   try {
     stream = await navigator.mediaDevices.getUserMedia({
       audio: false,
-      video: { facingMode: cfg.facing, width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 15, max: 24 } },
+      video: {
+        ...(cfg.deviceId ? { deviceId: { exact: cfg.deviceId } } : { facingMode: 'user' }),
+        width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 15, max: 24 },
+      },
     });
   } catch (e) {
+    if (cfg.deviceId) { cfg.deviceId = null; save(); return startCamera(); } // caméra disparue
+
     hint.textContent = "Caméra inaccessible : autorise-la dans le navigateur (" + e.name + ").";
     return;
   }
   video.srcObject = stream;
   await video.play().catch(() => {});
-  view.classList.toggle('mirror', cfg.facing === 'user');
+  // Effet miroir pour une caméra frontale ou une webcam, pas pour la caméra arrière.
+  const settings = stream.getVideoTracks()[0].getSettings();
+  view.classList.toggle('mirror', settings.facingMode !== 'environment');
   [goBtn, flipBtn, zoneBtn].forEach((b) => (b.disabled = false));
   camBtn.textContent = 'Caméra ✓';
   hint.textContent = state === 'idle' ? 'Prêt. Règle la zone si besoin, puis « Démarrer ».' : '';
@@ -87,12 +94,13 @@ function stopCamera() {
 const work = document.createElement('canvas');
 const wctx = work.getContext('2d', { willReadFrequently: true });
 const octx = overlay.getContext('2d');
-let AH = 60, N = 0, cur, bg, mask, maskN = 0, ovImg, bgReady = false;
+let AW = 160, AH = 120, N = 0, cur, tmp, bg, mask, maskN = 0, ovImg, bgReady = false;
 let timer = 0, hits = 0;
 
 function setupAnalysis() {
   const vw = video.videoWidth || 640, vh = video.videoHeight || 480;
   const ar = vw / vh;
+  AW = cfg.res;
   view.style.aspectRatio = vw + ' / ' + vh;
   view.style.width = 'min(100%, calc(58vh * ' + ar.toFixed(4) + '))';
   AH = Math.max(1, Math.round(AW / ar));
@@ -100,6 +108,7 @@ function setupAnalysis() {
   work.width = overlay.width = AW;
   work.height = overlay.height = AH;
   cur = new Float32Array(N);
+  tmp = new Float32Array(N);
   bg = new Float32Array(N);
   mask = new Uint8Array(N);
   ovImg = octx.createImageData(AW, AH);
@@ -120,11 +129,28 @@ function buildMask() {
   drawZone();
 }
 
-// Sensibilité 1..10 -> seuil de différence par pixel et part de l'image qui doit changer.
+// Sensibilité 0..100 -> écart de luminosité par pixel (40 à 12) et part de la zone qui doit
+// changer (15 % à 0,03 %, échelle logarithmique : chaque cran change le seuil du même facteur).
 function thresholds() {
-  const s = cfg.sens;
-  return { pix: 40 - 2.5 * s, area: 0.12 * Math.pow(0.6, s - 1) };
+  const v = cfg.sens2 / 100;
+  return { pix: 40 - 28 * v, area: 0.15 * Math.pow(0.002, v) };
 }
+
+// Flou 3x3 : moyenne le bruit du capteur, surtout utile aux résolutions fines.
+function blur() {
+  for (let y = 0; y < AH; y++) {
+    const r = y * AW;
+    for (let x = 0; x < AW; x++) {
+      const i = r + x;
+      tmp[i] = cur[x > 0 ? i - 1 : i] + cur[i] + cur[x < AW - 1 ? i + 1 : i];
+    }
+  }
+  for (let y = 0; y < AH; y++) {
+    const u = (y > 0 ? y - 1 : y) * AW, r = y * AW, d = (y < AH - 1 ? y + 1 : y) * AW;
+    for (let x = 0; x < AW; x++) cur[r + x] = (tmp[u + x] + tmp[r + x] + tmp[d + x]) / 9;
+  }
+}
+const pct = (f) => (f * 100).toFixed(f < 0.01 ? 2 : 1);
 
 function loop() {
   if (!stream || video.readyState < 2) return;
@@ -134,12 +160,10 @@ function loop() {
 function analyse(now) {
   wctx.drawImage(video, 0, 0, AW, AH);
   const d = wctx.getImageData(0, 0, AW, AH).data;
+  for (let i = 0, j = 0; i < N; i++, j += 4) cur[i] = (d[j] * 77 + d[j + 1] * 150 + d[j + 2] * 29) >> 8;
+  blur();
   let sc = 0, sb = 0;
-  for (let i = 0, j = 0; i < N; i++, j += 4) {
-    const g = (d[j] * 77 + d[j + 1] * 150 + d[j + 2] * 29) >> 8;
-    cur[i] = g;
-    if (mask[i]) { sc += g; sb += bg[i]; }
-  }
+  for (let i = 0; i < N; i++) if (mask[i]) { sc += cur[i]; sb += bg[i]; }
   if (!bgReady) { bg.set(cur); bgReady = true; return; }
 
   // Compense les variations globales de luminosité (exposition automatique).
@@ -161,6 +185,7 @@ function analyse(now) {
   const ratio = score / area;
   meterFill.style.width = Math.min(100, ratio * 50) + '%';
   meterFill.classList.toggle('over', ratio >= 1);
+  levelEl.textContent = pct(score);
 
   // Fond de référence : s'adapte lentement quand on surveille, vite sinon.
   let a = 0.25;
@@ -286,7 +311,16 @@ view.addEventListener('pointerup', () => {
 
 // ---------- Boutons et réglages ----------
 camBtn.onclick = () => { audio(); startCamera(); };
-flipBtn.onclick = () => { cfg.facing = cfg.facing === 'user' ? 'environment' : 'user'; save(); startCamera(); };
+flipBtn.onclick = async () => {
+  const cams = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput');
+  if (cams.length < 2) { hint.textContent = 'Une seule caméra disponible.'; return; }
+  const curId = stream && stream.getVideoTracks()[0].getSettings().deviceId;
+  const k = cams.findIndex((c) => c.deviceId === curId);
+  cfg.deviceId = cams[(k + 1) % cams.length].deviceId; save();
+  await startCamera();
+  const label = cams[(k + 1) % cams.length].label;
+  if (label && state === 'idle') hint.textContent = 'Caméra : ' + label;
+};
 goBtn.onclick = () => (state === 'idle' ? start() : stop());
 zoneBtn.onclick = () => {
   if (picking) { stopPicking(); return; }
@@ -309,8 +343,17 @@ function bindRange(id, key, fmtOut) {
   const show = () => { out.textContent = fmtOut(+el.value); };
   el.oninput = () => { cfg[key] = +el.value; show(); save(); };
   show();
+  return el;
 }
-bindRange('sens', 'sens', (v) => v + ' / 10');
+const sensEl = bindRange('sens', 'sens2', (v) => { thrEl.textContent = pct(thresholds().area); return v.toFixed(1); });
+function nudge(dv) {
+  sensEl.value = Math.min(100, Math.max(0, +sensEl.value + dv));
+  sensEl.oninput();
+}
+$('sensMinus').onclick = () => nudge(-0.5);
+$('sensPlus').onclick = () => nudge(0.5);
+$('res').value = cfg.res;
+$('res').onchange = (e) => { cfg.res = +e.target.value; save(); if (stream) setupAnalysis(); };
 bindRange('delay', 'delay', (v) => v + ' s');
 bindRange('cool', 'cool', (v) => v + ' s');
 $('sound').value = cfg.sound;

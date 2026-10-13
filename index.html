@@ -33,21 +33,34 @@
     </div>
 
     <div id="meter" aria-label="Niveau de mouvement"><div id="meterFill"></div><div id="meterMark"></div></div>
+    <p id="meterText">mouvement : <span id="level">0</span> % · seuil : <span id="thr">0</span> %</p>
+
+    <div class="tune">
+      <span>Sensibilité</span>
+      <button id="sensMinus" class="secondary" aria-label="Moins sensible">−</button>
+      <input id="sens" type="range" min="0" max="100" step="0.5" aria-label="Sensibilité">
+      <button id="sensPlus" class="secondary" aria-label="Plus sensible">+</button>
+      <output id="sensOut"></output>
+    </div>
 
     <div class="row">
       <button id="cam" class="secondary">Caméra</button>
       <button id="go" class="primary" disabled>Démarrer</button>
     </div>
     <div class="row">
-      <button id="flip" class="secondary" disabled>Retourner</button>
+      <button id="flip" class="secondary" disabled>Autre caméra</button>
       <button id="zoneBtn" class="secondary" disabled>Zone</button>
       <button id="reset" class="secondary">Remise à 0</button>
     </div>
 
     <details>
       <summary>Réglages</summary>
-      <label>Sensibilité <output id="sensOut"></output>
-        <input id="sens" type="range" min="1" max="10" step="1">
+      <label>Précision de l'analyse
+        <select id="res">
+          <option value="80">Légère (80 px) : petits téléphones</option>
+          <option value="160">Normale (160 px)</option>
+          <option value="240">Fine (240 px) : sujet loin de la caméra</option>
+        </select>
       </label>
       <label>Délai avant départ <output id="delayOut"></output>
         <input id="delay" type="range" min="0" max="30" step="1">
@@ -65,8 +78,10 @@
       </label>
       <button id="test" class="secondary">Tester le son</button>
       <p class="note">Zone : appuie sur « Zone » puis trace un rectangle sur l'image ; seul ce qui s'y passe compte.
-        La barre montre le mouvement mesuré, le trait blanc le seuil de déclenchement.
-        Pose le téléphone bien stable : s'il bouge, tout bouge.</p>
+        La barre montre le mouvement mesuré, le trait blanc le seuil de déclenchement ; les chiffres donnent
+        la part de la zone qui a changé. Sujet loin de la caméra : trace une zone serrée autour de lui,
+        c'est plus efficace que de pousser la sensibilité. Sur ordinateur, les flèches du clavier règlent
+        la sensibilité une fois le curseur sélectionné. Pose l'appareil bien stable : s'il bouge, tout bouge.</p>
     </details>
   </main>
   <script src="app.js"></script>
