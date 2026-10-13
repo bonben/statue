@@ -43,8 +43,6 @@ const SOUNDS = {
   off() {},
 };
 const playHit = () => (SOUNDS[cfg.sound] || SOUNDS.alarm)();
-const tick = () => tone(660, 0.08, { vol: 0.3 });
-const goTone = () => tone(990, 0.35, { vol: 0.4 });
 
 // ---------- Maintien de l'écran allumé ----------
 let wakeLock = null;
@@ -196,14 +194,13 @@ function start() {
   hint.textContent = 'Mets-toi en place…';
   const step = () => {
     if (n <= 0) { banner.hidden = true; arm(); return; }
-    banner.hidden = false; banner.textContent = n; tick(); n--;
+    banner.hidden = false; banner.textContent = n; n--;
     countTimer = setTimeout(step, 1000);
   };
   step();
 }
 
 function arm() {
-  goTone();
   bgReady = false; hits = 0;
   coolUntil = performance.now() + 600; // laisse le fond se stabiliser
   streakStart = Date.now();
